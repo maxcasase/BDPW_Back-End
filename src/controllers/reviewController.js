@@ -1,4 +1,4 @@
-// /controllers/reviewsController.js (o donde tengas este código)
+// /controllers/reviewsController.js
 
 const mongoose = require('mongoose');
 const Review = require('../models/Review');
@@ -6,18 +6,21 @@ const Review = require('../models/Review');
 exports.createReview = async (req, res) => {
   try {
     let { album_id, rating, title, content } = req.body;
-    const user_id = req.user.id.toString(); // forzamos a string
+    const user_id = req.user.id.toString(); // ObjectId de usuario en string
 
-    // Validar album_id como ObjectId
-    if (!mongoose.Types.ObjectId.isValid(album_id)) {
+    // Convertir album_id a número (viene del front como 1,2,3)
+    if (typeof album_id === 'string') {
+      album_id = parseInt(album_id, 10);
+    }
+
+    if (!album_id || Number.isNaN(album_id)) {
       return res.status(400).json({
         success: false,
-        message: 'album_id inválido para MongoDB',
+        message: 'album_id inválido',
       });
     }
-    album_id = new mongoose.Types.ObjectId(album_id);
 
-    // Revisar si ya existe la reseña
+    // Revisar si ya existe la reseña para ese user + album numérico
     const existingReview = await Review.findOne({ user_id, album_id });
     if (existingReview) {
       return res.status(400).json({
@@ -28,6 +31,8 @@ exports.createReview = async (req, res) => {
 
     const review = new Review({ user_id, album_id, rating, title, content });
     await review.save();
+
+    await review.populate('user_id', 'username profile_name avatar_url');
 
     res.status(201).json({
       success: true,
@@ -52,16 +57,14 @@ exports.getReviews = async (req, res) => {
     const filter = {};
 
     if (album_id) {
-      // si album_id en el schema es ObjectId:
-      if (!mongoose.Types.ObjectId.isValid(album_id)) {
-        // si no es un ObjectId válido (ej "1"), devolvemos lista vacía en vez de romper
-        return res.status(200).json({
-          success: true,
-          count: 0,
-          reviews: [],
+      const albumIdNum = parseInt(album_id, 10);
+      if (Number.isNaN(albumIdNum)) {
+        return res.status(400).json({
+          success: false,
+          message: 'album_id inválido',
         });
       }
-      filter.album_id = new mongoose.Types.ObjectId(album_id);
+      filter.album_id = albumIdNum;
     }
 
     const reviews = await Review.find(filter)
@@ -119,7 +122,6 @@ exports.deleteReview = async (req, res) => {
     const reviewId = req.params.id;
     const user_id = req.user.id;
 
-    // Solo permite borrar si la review es del usuario autenticado
     const review = await Review.findOne({ _id: reviewId, user_id });
     if (!review) {
       return res.status(404).json({
