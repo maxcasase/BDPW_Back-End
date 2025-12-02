@@ -4,12 +4,11 @@ const mongoose = require('mongoose');
 const reviewSchema = new mongoose.Schema(
   {
     user_id: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      type: Number,          // <- CAMBIA A Number
       required: true,
     },
     album_id: {
-      type: Number, // <- CAMBIA A NUMBER
+      type: Number,          // número de álbum de Postgres
       required: true,
     },
     rating: {

@@ -1,26 +1,22 @@
-// /controllers/reviewsController.js
-
-const mongoose = require('mongoose');
 const Review = require('../models/Review');
 
 exports.createReview = async (req, res) => {
   try {
     let { album_id, rating, title, content } = req.body;
-    const user_id = req.user.id.toString(); // ObjectId de usuario en string
+    let user_id = req.user.id; // viene del token, es 1,2,3...
 
-    // Convertir album_id a número (viene del front como 1,2,3)
-    if (typeof album_id === 'string') {
-      album_id = parseInt(album_id, 10);
+    // Normalizar a número
+    if (typeof user_id === 'string') user_id = parseInt(user_id, 10);
+    if (typeof album_id === 'string') album_id = parseInt(album_id, 10);
+
+    if (!user_id || Number.isNaN(user_id)) {
+      return res.status(400).json({ success: false, message: 'user_id inválido' });
     }
-
     if (!album_id || Number.isNaN(album_id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'album_id inválido',
-      });
+      return res.status(400).json({ success: false, message: 'album_id inválido' });
     }
 
-    // Revisar si ya existe la reseña para ese user + album numérico
+    // Evitar reseña duplicada del mismo usuario para el mismo álbum
     const existingReview = await Review.findOne({ user_id, album_id });
     if (existingReview) {
       return res.status(400).json({
@@ -31,8 +27,6 @@ exports.createReview = async (req, res) => {
 
     const review = new Review({ user_id, album_id, rating, title, content });
     await review.save();
-
-    await review.populate('user_id', 'username profile_name avatar_url');
 
     res.status(201).json({
       success: true,
@@ -71,7 +65,6 @@ exports.getReviews = async (req, res) => {
       .sort({ created_at: -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
-      .populate('user_id', 'username profile_name avatar_url')
       .exec();
 
     res.status(200).json({
@@ -88,10 +81,13 @@ exports.getReviews = async (req, res) => {
   }
 };
 
+
 exports.getUserReviews = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const user_id = req.user.id;
+    let user_id = req.user.id;
+
+    if (typeof user_id === 'string') user_id = parseInt(user_id, 10);
 
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
@@ -100,7 +96,6 @@ exports.getUserReviews = async (req, res) => {
       .sort({ created_at: -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
-      .populate('album_id')
       .exec();
 
     res.status(200).json({
@@ -120,7 +115,9 @@ exports.getUserReviews = async (req, res) => {
 exports.deleteReview = async (req, res) => {
   try {
     const reviewId = req.params.id;
-    const user_id = req.user.id;
+    let user_id = req.user.id;
+
+    if (typeof user_id === 'string') user_id = parseInt(user_id, 10);
 
     const review = await Review.findOne({ _id: reviewId, user_id });
     if (!review) {
