@@ -1,4 +1,5 @@
 const Review = require('../models/Review');
+const Notification = require('../models/Notification');
 const { query } = require('../config/database');
 
 exports.createReview = async (req, res) => {
@@ -33,6 +34,13 @@ exports.createReview = async (req, res) => {
     const review = new Review({ user_id, album_id, rating, title, content });
     await review.save();
 
+    // Crear notificación para el propio usuario
+    await Notification.create({
+      user_id,
+      title: 'Tu reseña se publicó correctamente',
+      body: `Publicaste una reseña para el álbum #${album_id}.`,
+    });
+
     // Traer datos del usuario desde Postgres
     const userResult = await query(
       'SELECT id, username, profile_name, email FROM users WHERE id = $1',
@@ -62,7 +70,6 @@ exports.createReview = async (req, res) => {
     });
   }
 };
-
 
 exports.getReviews = async (req, res) => {
   try {
@@ -143,7 +150,6 @@ exports.getReviews = async (req, res) => {
     });
   }
 };
-
 
 exports.getUserReviews = async (req, res) => {
   try {
