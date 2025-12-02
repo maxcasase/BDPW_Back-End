@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const Notification = require('../models/Notification');
-const { protect } = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/auth');
 
 // GET /api/v1/notifications  -> lista del usuario actual
 router.get('/', protect, async (req, res) => {
