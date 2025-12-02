@@ -1,4 +1,5 @@
 const Review = require('../models/Review');
+const { query } = require('../config/database');
 
 exports.createReview = async (req, res) => {
   try {
@@ -10,10 +11,14 @@ exports.createReview = async (req, res) => {
     if (typeof album_id === 'string') album_id = parseInt(album_id, 10);
 
     if (!user_id || Number.isNaN(user_id)) {
-      return res.status(400).json({ success: false, message: 'user_id inválido' });
+      return res
+        .status(400)
+        .json({ success: false, message: 'user_id inválido' });
     }
     if (!album_id || Number.isNaN(album_id)) {
-      return res.status(400).json({ success: false, message: 'album_id inválido' });
+      return res
+        .status(400)
+        .json({ success: false, message: 'album_id inválido' });
     }
 
     // Evitar reseña duplicada del mismo usuario para el mismo álbum
@@ -28,9 +33,26 @@ exports.createReview = async (req, res) => {
     const review = new Review({ user_id, album_id, rating, title, content });
     await review.save();
 
+    // Traer datos del usuario desde Postgres
+    const userResult = await query(
+      'SELECT id, username, profile_name, email FROM users WHERE id = $1',
+      [user_id]
+    );
+    const userRow = userResult.rows[0] || null;
+
     res.status(201).json({
       success: true,
-      review: review.toObject(),
+      review: {
+        ...review.toObject(),
+        user_id: userRow
+          ? {
+              _id: userRow.id,
+              username: userRow.username,
+              profile_name: userRow.profile_name,
+              email: userRow.email,
+            }
+          : null,
+      },
     });
   } catch (error) {
     console.error('Error creating review:', error);
@@ -40,6 +62,7 @@ exports.createReview = async (req, res) => {
     });
   }
 };
+
 
 exports.getReviews = async (req, res) => {
   try {
@@ -67,10 +90,50 @@ exports.getReviews = async (req, res) => {
       .limit(limitNum)
       .exec();
 
+    // Obtener user_ids únicos de las reseñas
+    const userIds = [
+      ...new Set(reviews.map((r) => r.user_id).filter((id) => !!id)),
+    ];
+
+    let usersById = {};
+
+    if (userIds.length > 0) {
+      // Traer usuarios desde Postgres
+      const userResult = await query(
+        `SELECT id, username, profile_name, email
+         FROM users
+         WHERE id = ANY($1::int[])`,
+        [userIds]
+      );
+
+      usersById = userResult.rows.reduce((acc, row) => {
+        acc[row.id] = row;
+        return acc;
+      }, {});
+    }
+
+    // Enriquecer cada review con los datos del usuario
+    const reviewsWithUser = reviews.map((review) => {
+      const plain = review.toObject();
+      const userRow = usersById[plain.user_id];
+
+      return {
+        ...plain,
+        user_id: userRow
+          ? {
+              _id: userRow.id,
+              username: userRow.username,
+              profile_name: userRow.profile_name,
+              email: userRow.email,
+            }
+          : null,
+      };
+    });
+
     res.status(200).json({
       success: true,
-      count: reviews.length,
-      reviews,
+      count: reviewsWithUser.length,
+      reviews: reviewsWithUser,
     });
   } catch (error) {
     console.error('Error getting reviews:', error);
